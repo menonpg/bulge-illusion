@@ -277,7 +277,6 @@ function render() {
   const colorB  = hexToRgb(document.getElementById('colorB').value);
   const colorBg = document.getElementById('colorBg').value;
 
-  // Read silhouette mask
   const srcData = dc.getImageData(0, 0, W, H).data;
   function isInside(x, y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return false;
@@ -298,10 +297,8 @@ function render() {
   const cols  = Math.ceil(W / cell) + 1;
   const rows  = Math.ceil(H / cell) + 1;
   const dotPx = Math.max(2, Math.floor(cell * dotFrac));
-  // inset: how far from the cell edge to place the dot
-  const inset = Math.max(1, Math.round(cell * insetPct * 0.12));
+  const inset = Math.max(1, Math.round(cell * insetPct * 0.15));
 
-  // Background
   oc.fillStyle = colorBg;
   oc.fillRect(0, 0, W, H);
 
@@ -316,24 +313,51 @@ function render() {
       const [r,  g,  b ] = isDark ? colorA : colorB;
       const [dr, dg, db] = isDark ? colorB : colorA;
 
-      // Draw base checkerboard cell
+      // Draw base cell
       oc.fillStyle = `rgb(${r},${g},${b})`;
       oc.fillRect(x0, y0, cell, cell);
 
-      // Only add dot if cell center is inside the silhouette
       if (!isInside(cellCx, cellCy)) continue;
 
-      // Corner direction: toward centroid = pop out, away = cave in
-      const sign = popOut ? 1 : -1;
-      const dx = sign * (shapeCx - cellCx);
-      const dy = sign * (shapeCy - cellCy);
+      // Which quadrant is this cell in relative to the shape centroid?
+      // Quadrant determines which diagonal pair of corners gets the dots.
+      //
+      // The illusion works by making the BORDERS between cells appear to curve.
+      // Each cell gets TWO dots in DIAGONALLY OPPOSITE corners.
+      // The diagonal axis rotates 90° between quadrants → perceived curvature.
+      //
+      // Pop-out: dot diagonal axis points TOWARD centroid (tangential to bulge surface)
+      // Cave-in: dot diagonal axis points AWAY from centroid
 
-      // Snap to one of 4 corners (toward centroid)
-      const cornerX = dx >= 0 ? (x0 + cell - inset - dotPx) : (x0 + inset);
-      const cornerY = dy >= 0 ? (y0 + cell - inset - dotPx) : (y0 + inset);
+      const dx = cellCx - shapeCx;  // positive = right of center
+      const dy = cellCy - shapeCy;  // positive = below center
+
+      // Determine which diagonal to use based on quadrant + pop/cave
+      // Quadrant I (right+down):  use  \  diagonal (top-right & bottom-left)  pop-out
+      // Quadrant II (left+down):  use  /  diagonal (top-left & bottom-right)  pop-out
+      // Quadrant III (left+up):   use  \  diagonal (top-right & bottom-left) pop-out  (same as I)
+      // Quadrant IV (right+up):   use  /  diagonal                            pop-out  (same as II)
+      // i.e. diagonal = (dx * dy >= 0) ? '\' : '/'
+      // For cave-in: flip
+
+      let useDiagSlash; // true = / diagonal, false = \ diagonal
+      if (popOut) {
+        useDiagSlash = (dx * dy < 0); // opposite quadrants share same diagonal
+      } else {
+        useDiagSlash = (dx * dy >= 0);
+      }
 
       oc.fillStyle = `rgb(${dr},${dg},${db})`;
-      oc.fillRect(cornerX, cornerY, dotPx, dotPx);
+
+      if (useDiagSlash) {
+        // / diagonal: top-left corner and bottom-right corner
+        oc.fillRect(x0 + inset,                  y0 + inset,                  dotPx, dotPx);
+        oc.fillRect(x0 + cell - inset - dotPx,   y0 + cell - inset - dotPx,   dotPx, dotPx);
+      } else {
+        // \ diagonal: top-right corner and bottom-left corner
+        oc.fillRect(x0 + cell - inset - dotPx,   y0 + inset,                  dotPx, dotPx);
+        oc.fillRect(x0 + inset,                  y0 + cell - inset - dotPx,   dotPx, dotPx);
+      }
     }
   }
 }
