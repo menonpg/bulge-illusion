@@ -310,14 +310,12 @@ function render() {
 
       if (!inside) continue;
 
-      // Direction from cell center AWAY from silhouette centroid
-      // = the corner furthest from the centroid = "outward" corner
-      const dx = cellCx - shapeCx;
-      const dy = cellCy - shapeCy;
+      // Direction from cell center TOWARD silhouette centroid
+      // = the corner closest to the centroid = "inward" corner → creates pop-out
+      const dx = shapeCx - cellCx;
+      const dy = shapeCy - cellCy;
 
-      // Pick one of 4 corners based on direction
-      // cornerX: right side of cell if dx > 0, left if dx < 0
-      // cornerY: bottom if dy > 0, top if dy < 0
+      // Pick one of 4 corners based on direction toward centroid
       const cornerX = dx >= 0 ? (x0 + cell - inset - dotPx) : (x0 + inset);
       const cornerY = dy >= 0 ? (y0 + cell - inset - dotPx) : (y0 + inset);
 
