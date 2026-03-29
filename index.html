@@ -297,10 +297,18 @@ function render() {
   const cols  = Math.ceil(W / cell) + 1;
   const rows  = Math.ceil(H / cell) + 1;
   const dotPx = Math.max(2, Math.floor(cell * dotFrac));
-  const inset = Math.max(1, Math.round(cell * insetPct * 0.15));
+  const cwo   = cell * insetPct * 0.35; // offset from cell center to dot center (matches Kitaoka: 10/35 of cell)
 
   oc.fillStyle = colorBg;
   oc.fillRect(0, 0, W, H);
+
+  // Kitaoka's 4 corner offsets (from cell center):
+  // bit 0 → (+cwo, -cwo)  top-right
+  // bit 1 → (+cwo, +cwo)  bottom-right
+  // bit 2 → (-cwo, -cwo)  top-left
+  // bit 3 → (-cwo, +cwo)  bottom-left
+  const xd = [ 1,  1, -1, -1];
+  const yd = [-1,  1, -1,  1];
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -313,51 +321,42 @@ function render() {
       const [r,  g,  b ] = isDark ? colorA : colorB;
       const [dr, dg, db] = isDark ? colorB : colorA;
 
-      // Draw base cell
       oc.fillStyle = `rgb(${r},${g},${b})`;
       oc.fillRect(x0, y0, cell, cell);
 
       if (!isInside(cellCx, cellCy)) continue;
 
-      // Which quadrant is this cell in relative to the shape centroid?
-      // Quadrant determines which diagonal pair of corners gets the dots.
+      // Direction from cell to centroid (normalised)
+      const dx = shapeCx - cellCx;
+      const dy = shapeCy - cellCy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 1) continue;
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      // Determine which corners to place dots in.
+      // Rule (from Kitaoka's actual algorithm):
+      //   The dot goes in the corner(s) whose direction vector has the
+      //   HIGHEST dot-product with the direction toward the centroid.
+      //   For pop-out: use the corner most aligned WITH centroid direction.
+      //   For cave-in: use the corner most aligned AWAY from centroid direction.
       //
-      // The illusion works by making the BORDERS between cells appear to curve.
-      // Each cell gets TWO dots in DIAGONALLY OPPOSITE corners.
-      // The diagonal axis rotates 90° between quadrants → perceived curvature.
-      //
-      // Pop-out: dot diagonal axis points TOWARD centroid (tangential to bulge surface)
-      // Cave-in: dot diagonal axis points AWAY from centroid
+      // We pick the single best-matching corner (1 dot per cell like in the photo).
+      // This gives a clean single offset that creates the curvature perception.
 
-      const dx = cellCx - shapeCx;  // positive = right of center
-      const dy = cellCy - shapeCy;  // positive = below center
-
-      // Determine which diagonal to use based on quadrant + pop/cave
-      // Quadrant I (right+down):  use  \  diagonal (top-right & bottom-left)  pop-out
-      // Quadrant II (left+down):  use  /  diagonal (top-left & bottom-right)  pop-out
-      // Quadrant III (left+up):   use  \  diagonal (top-right & bottom-left) pop-out  (same as I)
-      // Quadrant IV (right+up):   use  /  diagonal                            pop-out  (same as II)
-      // i.e. diagonal = (dx * dy >= 0) ? '\' : '/'
-      // For cave-in: flip
-
-      let useDiagSlash; // true = / diagonal, false = \ diagonal
-      if (popOut) {
-        useDiagSlash = (dx * dy < 0); // opposite quadrants share same diagonal
-      } else {
-        useDiagSlash = (dx * dy >= 0);
+      let bestQ = 0;
+      let bestDot = -Infinity;
+      for (let q = 0; q < 4; q++) {
+        const cx = xd[q], cy = yd[q];
+        const d = popOut ? (cx*nx + cy*ny) : -(cx*nx + cy*ny);
+        if (d > bestDot) { bestDot = d; bestQ = q; }
       }
+
+      const dotX = Math.round(cellCx + xd[bestQ]*cwo - dotPx/2);
+      const dotY = Math.round(cellCy + yd[bestQ]*cwo - dotPx/2);
 
       oc.fillStyle = `rgb(${dr},${dg},${db})`;
-
-      if (useDiagSlash) {
-        // / diagonal: top-left corner and bottom-right corner
-        oc.fillRect(x0 + inset,                  y0 + inset,                  dotPx, dotPx);
-        oc.fillRect(x0 + cell - inset - dotPx,   y0 + cell - inset - dotPx,   dotPx, dotPx);
-      } else {
-        // \ diagonal: top-right corner and bottom-left corner
-        oc.fillRect(x0 + cell - inset - dotPx,   y0 + inset,                  dotPx, dotPx);
-        oc.fillRect(x0 + inset,                  y0 + cell - inset - dotPx,   dotPx, dotPx);
-      }
+      oc.fillRect(dotX, dotY, dotPx, dotPx);
     }
   }
 }
