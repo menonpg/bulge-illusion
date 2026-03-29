@@ -334,29 +334,31 @@ function render() {
       const nx = dx / dist;
       const ny = dy / dist;
 
-      // Determine which corners to place dots in.
-      // Rule (from Kitaoka's actual algorithm):
-      //   The dot goes in the corner(s) whose direction vector has the
-      //   HIGHEST dot-product with the direction toward the centroid.
-      //   For pop-out: use the corner most aligned WITH centroid direction.
-      //   For cave-in: use the corner most aligned AWAY from centroid direction.
+      // Kitaoka's rule for which corners get dots:
       //
-      // We pick the single best-matching corner (1 dot per cell like in the photo).
-      // This gives a clean single offset that creates the curvature perception.
+      // Rank all 4 corners by alignment with the toward-centroid direction.
+      // The TOP TWO corners get dots — UNLESS one of the axes dominates
+      // (|nx| >> |ny| or |ny| >> |nx|), in which case both dots land on
+      // the same face (same side of the cell).
+      //
+      // Concretely: sort corners by dot-product score, pick top 2.
+      // For cave-in, negate the scores (pick corners pointing away).
 
-      let bestQ = 0;
-      let bestDot = -Infinity;
-      for (let q = 0; q < 4; q++) {
-        const cx = xd[q], cy = yd[q];
-        const d = popOut ? (cx*nx + cy*ny) : -(cx*nx + cy*ny);
-        if (d > bestDot) { bestDot = d; bestQ = q; }
-      }
+      const scores = xd.map((cx, q) => {
+        const cy = yd[q];
+        return popOut ? (cx*nx + cy*ny) : -(cx*nx + cy*ny);
+      });
 
-      const dotX = Math.round(cellCx + xd[bestQ]*cwo - dotPx/2);
-      const dotY = Math.round(cellCy + yd[bestQ]*cwo - dotPx/2);
+      // Sort corner indices by score descending, pick top 2
+      const sorted = [0,1,2,3].sort((a,b) => scores[b] - scores[a]);
+      const chosen = sorted.slice(0, 2);
 
       oc.fillStyle = `rgb(${dr},${dg},${db})`;
-      oc.fillRect(dotX, dotY, dotPx, dotPx);
+      for (const q of chosen) {
+        const dotX = Math.round(cellCx + xd[q]*cwo - dotPx/2);
+        const dotY = Math.round(cellCy + yd[q]*cwo - dotPx/2);
+        oc.fillRect(dotX, dotY, dotPx, dotPx);
+      }
     }
   }
 }
