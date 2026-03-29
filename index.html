@@ -150,6 +150,13 @@
     <label>Background</label>
     <input type="color" id="colorBg" value="#888888">
   </div>
+  <div class="control-group">
+    <label>Effect direction</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button id="popBtn" style="background:#f0a500;color:#111;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">⬆ Pop Out</button>
+      <button id="caveBtn" style="background:#444;color:#eee;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">⬇ Cave In</button>
+    </div>
+  </div>
   <div class="control-group" style="justify-content:flex-end; margin-top:4px">
     <button id="clearBtn">🗑 Clear</button>
   </div>
@@ -222,6 +229,22 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   dc.fillRect(0, 0, 400, 400);
   oc.fillStyle = '#888';
   oc.fillRect(0, 0, 400, 400);
+});
+
+let popOut = true;
+document.getElementById('popBtn').addEventListener('click', () => {
+  popOut = true;
+  document.getElementById('popBtn').style.background  = '#f0a500';
+  document.getElementById('popBtn').style.color       = '#111';
+  document.getElementById('caveBtn').style.background = '#444';
+  document.getElementById('caveBtn').style.color      = '#eee';
+});
+document.getElementById('caveBtn').addEventListener('click', () => {
+  popOut = false;
+  document.getElementById('caveBtn').style.background = '#f0a500';
+  document.getElementById('caveBtn').style.color      = '#111';
+  document.getElementById('popBtn').style.background  = '#444';
+  document.getElementById('popBtn').style.color       = '#eee';
 });
 
 // --- Slider labels ---
@@ -300,9 +323,10 @@ function render() {
       // Only add dot if cell center is inside the silhouette
       if (!isInside(cellCx, cellCy)) continue;
 
-      // Vector from cell center TOWARD shape centroid → "inward" corner = pop-out
-      const dx = shapeCx - cellCx;
-      const dy = shapeCy - cellCy;
+      // Corner direction: toward centroid = pop out, away = cave in
+      const sign = popOut ? 1 : -1;
+      const dx = sign * (shapeCx - cellCx);
+      const dy = sign * (shapeCy - cellCy);
 
       // Snap to one of 4 corners (toward centroid)
       const cornerX = dx >= 0 ? (x0 + cell - inset - dotPx) : (x0 + inset);
