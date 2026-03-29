@@ -135,8 +135,8 @@
     <input type="range" id="dotSize" min="15" max="55" value="35">
   </div>
   <div class="control-group">
-    <label>Bulge strength: <span id="bulgeVal">60</span>%</label>
-    <input type="range" id="bulgeStrength" min="10" max="100" value="60">
+    <label>Corner inset: <span id="bulgeVal">60</span>%</label>
+    <input type="range" id="bulgeStrength" min="10" max="95" value="60">
   </div>
   <div class="control-group">
     <label>Color A</label>
@@ -247,87 +247,82 @@ function hexToRgb(hex) {
 
 function render() {
   const W = 400, H = 400;
-  const cell      = parseInt(document.getElementById('cellSize').value);
-  const dotFrac   = parseInt(document.getElementById('dotSize').value) / 100;
-  const bulge     = parseInt(document.getElementById('bulgeStrength').value) / 100;
-  const colorA    = hexToRgb(document.getElementById('colorA').value);
-  const colorB    = hexToRgb(document.getElementById('colorB').value);
-  const colorBg   = document.getElementById('colorBg').value;
+  const cell    = parseInt(document.getElementById('cellSize').value);
+  const dotFrac = parseInt(document.getElementById('dotSize').value) / 100;
+  const margin  = parseInt(document.getElementById('bulgeStrength').value) / 100; // controls inset from corner
+  const colorA  = hexToRgb(document.getElementById('colorA').value);
+  const colorB  = hexToRgb(document.getElementById('colorB').value);
+  const colorBg = document.getElementById('colorBg').value;
 
   // Read silhouette mask from draw canvas
   const srcData = dc.getImageData(0, 0, W, H).data;
   function isInside(x, y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return false;
     const idx = (Math.round(y) * W + Math.round(x)) * 4;
-    // black pixels = drawn = inside
-    return srcData[idx] < 128;
+    return srcData[idx] < 128; // black = inside
   }
 
-  // Centre of pattern
-  const cx = W / 2, cy = H / 2;
-  const maxDist = Math.sqrt(cx*cx + cy*cy);
+  // Compute centroid of the silhouette for corner direction
+  let sumX = 0, sumY = 0, count = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (isInside(x, y)) { sumX += x; sumY += y; count++; }
+    }
+  }
+  const shapeCx = count > 0 ? sumX / count : W / 2;
+  const shapeCy = count > 0 ? sumY / count : H / 2;
 
   // Fill background
   oc.fillStyle = colorBg;
   oc.fillRect(0, 0, W, H);
 
-  const dotPx = Math.floor(cell * dotFrac);
+  const dotPx  = Math.max(2, Math.floor(cell * dotFrac));
+  // Inset from corner edge — small gap so dot doesn't touch cell border
+  const inset  = Math.max(1, Math.floor(cell * (1 - margin) * 0.08 + 1));
 
-  // Grid of cells
   const cols = Math.ceil(W / cell) + 1;
   const rows = Math.ceil(H / cell) + 1;
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      // Top-left of this cell
-      const cx0 = col * cell;
-      const cy0 = row * cell;
-      const cellCx = cx0 + cell / 2;
-      const cellCy = cy0 + cell / 2;
+      const x0     = col * cell;
+      const y0     = row * cell;
+      const cellCx = x0 + cell / 2;
+      const cellCy = y0 + cell / 2;
 
-      // Is this a dark or light square in the checkerboard?
+      // Checkerboard color
       const isDark = (row + col) % 2 === 0;
-      const [r, g, b] = isDark ? colorA : colorB;
-      const [dr, dg, db] = isDark ? colorB : colorA; // dot is opposite color
+      const [r, g, b]   = isDark ? colorA : colorB;
+      const [dr, dg, db] = isDark ? colorB : colorA; // dot = opposite
 
-      // Draw the big square
+      // Draw base square
       oc.fillStyle = `rgb(${r},${g},${b})`;
-      oc.fillRect(cx0, cy0, cell, cell);
+      oc.fillRect(x0, y0, cell, cell);
 
-      // Only draw dot if ANY part of the cell is inside the silhouette
-      // Sample 4 corners + center
-      const samples = [
-        [cx0 + 2, cy0 + 2],
-        [cx0 + cell - 2, cy0 + 2],
-        [cx0 + 2, cy0 + cell - 2],
-        [cx0 + cell - 2, cy0 + cell - 2],
-        [cellCx, cellCy]
-      ];
-      const inside = samples.some(([sx, sy]) => isInside(sx, sy));
+      // Check if cell is inside silhouette (sample 5 points)
+      const inside = [
+        [x0 + 2,        y0 + 2],
+        [x0 + cell - 2, y0 + 2],
+        [x0 + 2,        y0 + cell - 2],
+        [x0 + cell - 2, y0 + cell - 2],
+        [cellCx,        cellCy]
+      ].some(([sx, sy]) => isInside(sx, sy));
+
       if (!inside) continue;
 
-      // Direction vector from cell center to pattern center
-      let dx = cx - cellCx;
-      let dy = cy - cellCy;
-      const dist = Math.sqrt(dx*dx + dy*dy);
+      // Direction from cell center AWAY from silhouette centroid
+      // = the corner furthest from the centroid = "outward" corner
+      const dx = cellCx - shapeCx;
+      const dy = cellCy - shapeCy;
 
-      // Normalise
-      let nx = 0, ny = 0;
-      if (dist > 0) { nx = dx / dist; ny = dy / dist; }
+      // Pick one of 4 corners based on direction
+      // cornerX: right side of cell if dx > 0, left if dx < 0
+      // cornerY: bottom if dy > 0, top if dy < 0
+      const cornerX = dx >= 0 ? (x0 + cell - inset - dotPx) : (x0 + inset);
+      const cornerY = dy >= 0 ? (y0 + cell - inset - dotPx) : (y0 + inset);
 
-      // Offset magnitude: proportional to distance from center, scaled by bulge
-      // Closer to edge of pattern = stronger push toward center
-      const distFrac = Math.min(dist / maxDist, 1);
-      const maxOffset = (cell - dotPx) / 2 - 1;
-      const offset = maxOffset * bulge * distFrac;
-
-      // Dot center: pushed toward pattern center
-      const dotCx = cellCx + nx * offset;
-      const dotCy = cellCy + ny * offset;
-
-      const half = dotPx / 2;
       oc.fillStyle = `rgb(${dr},${dg},${db})`;
-      oc.fillRect(Math.round(dotCx - half), Math.round(dotCy - half), dotPx, dotPx);
+      oc.fillRect(cornerX, cornerY, dotPx, dotPx);
     }
   }
 }
