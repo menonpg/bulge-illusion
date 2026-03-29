@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulge Illusion Generator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a1a;
+    color: #eee;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { margin-bottom: 4px; font-size: 1.4rem; letter-spacing: 0.05em; }
+  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 16px; }
+  .workspace {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+  }
+  canvas {
+    border: 2px solid #444;
+    cursor: crosshair;
+    border-radius: 4px;
+    display: block;
+  }
+  #drawCanvas { background: #fff; }
+  #outputCanvas { background: #222; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 16px;
+    width: 100%;
+    max-width: 860px;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #aaa;
+  }
+  input[type=range] { width: 120px; accent-color: #f0a500; }
+  button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  #renderBtn { background: #f0a500; color: #111; }
+  #clearBtn  { background: #444; color: #eee; }
+  #downloadBtn { background: #2a7d4f; color: #fff; }
+  .btn-row { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+  .tip { font-size: 0.75rem; color: #666; margin-top: 12px; text-align: center; }
+  .brush-size-preview {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #brushPreviewDot {
+    background: #000;
+    border-radius: 50%;
+  }
+  .color-btns { display: flex; gap: 6px; }
+  .color-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+  }
+  .color-btn.active { border-color: #f0a500; }
+</style>
+</head>
+<body>
+
+<h1>🔲 Bulge Illusion Generator</h1>
+<p class="subtitle">Draw a silhouette → render the optical illusion inside it</p>
+
+<div class="workspace">
+  <div class="panel">
+    <div class="panel-label">1. Draw your silhouette</div>
+    <canvas id="drawCanvas" width="400" height="400"></canvas>
+    <div class="color-btns">
+      <button class="color-btn active" id="drawBtn"  style="background:#000" title="Draw"></button>
+      <button class="color-btn"        id="eraseBtn" style="background:#fff; border-color:#999" title="Erase"></button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">2. Bulge illusion output</div>
+    <canvas id="outputCanvas" width="400" height="400"></canvas>
+    <div class="btn-row">
+      <button id="renderBtn">✨ Render Illusion</button>
+      <button id="downloadBtn">⬇ Download</button>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Brush size: <span id="brushVal">30</span>px</label>
+    <input type="range" id="brushSize" min="5" max="80" value="30">
+  </div>
+  <div class="control-group">
+    <label>Cell size: <span id="cellVal">20</span>px</label>
+    <input type="range" id="cellSize" min="8" max="50" value="20">
+  </div>
+  <div class="control-group">
+    <label>Dot size: <span id="dotVal">35</span>%</label>
+    <input type="range" id="dotSize" min="15" max="55" value="35">
+  </div>
+  <div class="control-group">
+    <label>Bulge strength: <span id="bulgeVal">60</span>%</label>
+    <input type="range" id="bulgeStrength" min="10" max="100" value="60">
+  </div>
+  <div class="control-group">
+    <label>Color A</label>
+    <input type="color" id="colorA" value="#1a1a1a">
+  </div>
+  <div class="control-group">
+    <label>Color B</label>
+    <input type="color" id="colorB" value="#f5f0dc">
+  </div>
+  <div class="control-group">
+    <label>Background</label>
+    <input type="color" id="colorBg" value="#888888">
+  </div>
+  <div class="control-group" style="justify-content:flex-end; margin-top:4px">
+    <button id="clearBtn">🗑 Clear</button>
+  </div>
+</div>
+
+<p class="tip">Draw any shape — letter, animal, face, logo. Fill it solid. Then hit Render.</p>
+
+<script>
+const drawCanvas = document.getElementById('drawCanvas');
+const outputCanvas = document.getElementById('outputCanvas');
+const dc = drawCanvas.getContext('2d');
+const oc = outputCanvas.getContext('2d');
+
+// --- Drawing ---
+let painting = false;
+let mode = 'draw'; // or 'erase'
+
+dc.fillStyle = '#fff';
+dc.fillRect(0, 0, 400, 400);
+
+function getPos(e) {
+  const r = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / r.width;
+  const scaleY = drawCanvas.height / r.height;
+  if (e.touches) {
+    return {
+      x: (e.touches[0].clientX - r.left) * scaleX,
+      y: (e.touches[0].clientY - r.top) * scaleY
+    };
+  }
+  return {
+    x: (e.clientX - r.left) * scaleX,
+    y: (e.clientY - r.top) * scaleY
+  };
+}
+
+function paint(e) {
+  e.preventDefault();
+  if (!painting) return;
+  const {x, y} = getPos(e);
+  const size = parseInt(document.getElementById('brushSize').value);
+  dc.beginPath();
+  dc.arc(x, y, size / 2, 0, Math.PI * 2);
+  dc.fillStyle = mode === 'draw' ? '#000' : '#fff';
+  dc.fill();
+}
+
+drawCanvas.addEventListener('mousedown',  e => { painting = true; paint(e); });
+drawCanvas.addEventListener('mousemove',  e => paint(e));
+drawCanvas.addEventListener('mouseup',    () => painting = false);
+drawCanvas.addEventListener('mouseleave', () => painting = false);
+drawCanvas.addEventListener('touchstart', e => { painting = true; paint(e); });
+drawCanvas.addEventListener('touchmove',  e => paint(e));
+drawCanvas.addEventListener('touchend',   () => painting = false);
+
+document.getElementById('drawBtn').addEventListener('click', () => {
+  mode = 'draw';
+  document.getElementById('drawBtn').classList.add('active');
+  document.getElementById('eraseBtn').classList.remove('active');
+  drawCanvas.style.cursor = 'crosshair';
+});
+document.getElementById('eraseBtn').addEventListener('click', () => {
+  mode = 'erase';
+  document.getElementById('eraseBtn').classList.add('active');
+  document.getElementById('drawBtn').classList.remove('active');
+  drawCanvas.style.cursor = 'cell';
+});
+document.getElementById('clearBtn').addEventListener('click', () => {
+  dc.fillStyle = '#fff';
+  dc.fillRect(0, 0, 400, 400);
+  oc.fillStyle = '#888';
+  oc.fillRect(0, 0, 400, 400);
+});
+
+// --- Slider labels ---
+['brushSize','cellSize','dotSize','bulgeStrength'].forEach(id => {
+  const el = document.getElementById(id);
+  const label = document.getElementById(id.replace('Size','Val').replace('Strength','Val').replace('brushSize','brushVal'));
+  // map correctly
+  const labelMap = {brushSize:'brushVal',cellSize:'cellVal',dotSize:'dotVal',bulgeStrength:'bulgeVal'};
+  el.addEventListener('input', () => {
+    document.getElementById(labelMap[id]).textContent = el.value;
+  });
+});
+
+// --- Render ---
+document.getElementById('renderBtn').addEventListener('click', render);
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function render() {
+  const W = 400, H = 400;
+  const cell      = parseInt(document.getElementById('cellSize').value);
+  const dotFrac   = parseInt(document.getElementById('dotSize').value) / 100;
+  const bulge     = parseInt(document.getElementById('bulgeStrength').value) / 100;
+  const colorA    = hexToRgb(document.getElementById('colorA').value);
+  const colorB    = hexToRgb(document.getElementById('colorB').value);
+  const colorBg   = document.getElementById('colorBg').value;
+
+  // Read silhouette mask from draw canvas
+  const srcData = dc.getImageData(0, 0, W, H).data;
+  function isInside(x, y) {
+    if (x < 0 || y < 0 || x >= W || y >= H) return false;
+    const idx = (Math.round(y) * W + Math.round(x)) * 4;
+    // black pixels = drawn = inside
+    return srcData[idx] < 128;
+  }
+
+  // Centre of pattern
+  const cx = W / 2, cy = H / 2;
+  const maxDist = Math.sqrt(cx*cx + cy*cy);
+
+  // Fill background
+  oc.fillStyle = colorBg;
+  oc.fillRect(0, 0, W, H);
+
+  const dotPx = Math.floor(cell * dotFrac);
+
+  // Grid of cells
+  const cols = Math.ceil(W / cell) + 1;
+  const rows = Math.ceil(H / cell) + 1;
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      // Top-left of this cell
+      const cx0 = col * cell;
+      const cy0 = row * cell;
+      const cellCx = cx0 + cell / 2;
+      const cellCy = cy0 + cell / 2;
+
+      // Is this a dark or light square in the checkerboard?
+      const isDark = (row + col) % 2 === 0;
+      const [r, g, b] = isDark ? colorA : colorB;
+      const [dr, dg, db] = isDark ? colorB : colorA; // dot is opposite color
+
+      // Draw the big square
+      oc.fillStyle = `rgb(${r},${g},${b})`;
+      oc.fillRect(cx0, cy0, cell, cell);
+
+      // Only draw dot if ANY part of the cell is inside the silhouette
+      // Sample 4 corners + center
+      const samples = [
+        [cx0 + 2, cy0 + 2],
+        [cx0 + cell - 2, cy0 + 2],
+        [cx0 + 2, cy0 + cell - 2],
+        [cx0 + cell - 2, cy0 + cell - 2],
+        [cellCx, cellCy]
+      ];
+      const inside = samples.some(([sx, sy]) => isInside(sx, sy));
+      if (!inside) continue;
+
+      // Direction vector from cell center to pattern center
+      let dx = cx - cellCx;
+      let dy = cy - cellCy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      // Normalise
+      let nx = 0, ny = 0;
+      if (dist > 0) { nx = dx / dist; ny = dy / dist; }
+
+      // Offset magnitude: proportional to distance from center, scaled by bulge
+      // Closer to edge of pattern = stronger push toward center
+      const distFrac = Math.min(dist / maxDist, 1);
+      const maxOffset = (cell - dotPx) / 2 - 1;
+      const offset = maxOffset * bulge * distFrac;
+
+      // Dot center: pushed toward pattern center
+      const dotCx = cellCx + nx * offset;
+      const dotCy = cellCy + ny * offset;
+
+      const half = dotPx / 2;
+      oc.fillStyle = `rgb(${dr},${dg},${db})`;
+      oc.fillRect(Math.round(dotCx - half), Math.round(dotCy - half), dotPx, dotPx);
+    }
+  }
+}
+
+// --- Download ---
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'bulge-illusion.png';
+  link.href = outputCanvas.toDataURL();
+  link.click();
+});
+</script>
+</body>
+</html>
