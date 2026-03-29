@@ -157,6 +157,13 @@
       <button id="caveBtn" style="background:#444;color:#eee;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">⬇ Cave In</button>
     </div>
   </div>
+  <div class="control-group">
+    <label>Dot mode</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button id="mode1Btn" style="background:#f0a500;color:#111;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">① Single</button>
+      <button id="mode2Btn" style="background:#444;color:#eee;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">② Smart 2</button>
+    </div>
+  </div>
   <div class="control-group" style="justify-content:flex-end; margin-top:4px">
     <button id="clearBtn">🗑 Clear</button>
   </div>
@@ -232,20 +239,21 @@ document.getElementById('clearBtn').addEventListener('click', () => {
 });
 
 let popOut = true;
-document.getElementById('popBtn').addEventListener('click', () => {
-  popOut = true;
-  document.getElementById('popBtn').style.background  = '#f0a500';
-  document.getElementById('popBtn').style.color       = '#111';
-  document.getElementById('caveBtn').style.background = '#444';
-  document.getElementById('caveBtn').style.color      = '#eee';
-});
-document.getElementById('caveBtn').addEventListener('click', () => {
-  popOut = false;
-  document.getElementById('caveBtn').style.background = '#f0a500';
-  document.getElementById('caveBtn').style.color      = '#111';
-  document.getElementById('popBtn').style.background  = '#444';
-  document.getElementById('popBtn').style.color       = '#eee';
-});
+let dotMode = 1; // 1 = single best corner, 2 = smart top-2
+
+function setActive(btnId, groupIds) {
+  groupIds.forEach(id => {
+    const el = document.getElementById(id);
+    const isActive = id === btnId;
+    el.style.background = isActive ? '#f0a500' : '#444';
+    el.style.color      = isActive ? '#111'    : '#eee';
+  });
+}
+
+document.getElementById('popBtn').addEventListener('click',  () => { popOut = true;  setActive('popBtn',   ['popBtn','caveBtn']); });
+document.getElementById('caveBtn').addEventListener('click', () => { popOut = false; setActive('caveBtn',  ['popBtn','caveBtn']); });
+document.getElementById('mode1Btn').addEventListener('click',() => { dotMode = 1;    setActive('mode1Btn', ['mode1Btn','mode2Btn']); });
+document.getElementById('mode2Btn').addEventListener('click',() => { dotMode = 2;    setActive('mode2Btn', ['mode1Btn','mode2Btn']); });
 
 // --- Slider labels ---
 ['brushSize','cellSize','dotSize','bulgeStrength'].forEach(id => {
@@ -334,30 +342,28 @@ function render() {
       const nx = dx / dist;
       const ny = dy / dist;
 
-      // Kitaoka's rule for which corners get dots:
-      //
-      // Rank all 4 corners by alignment with the toward-centroid direction.
-      // The TOP TWO corners get dots — UNLESS one of the axes dominates
-      // (|nx| >> |ny| or |ny| >> |nx|), in which case both dots land on
-      // the same face (same side of the cell).
-      //
-      // Concretely: sort corners by dot-product score, pick top 2.
-      // For cave-in, negate the scores (pick corners pointing away).
-
+      // Score each of the 4 corners by alignment with toward-centroid direction
       const scores = xd.map((cx, q) => {
         const cy = yd[q];
         return popOut ? (cx*nx + cy*ny) : -(cx*nx + cy*ny);
       });
 
-      // Sort corner indices by score descending, pick top 2
-      const sorted = [0,1,2,3].sort((a,b) => scores[b] - scores[a]);
-      const chosen = sorted.slice(0, 2);
-
       oc.fillStyle = `rgb(${dr},${dg},${db})`;
-      for (const q of chosen) {
-        const dotX = Math.round(cellCx + xd[q]*cwo - dotPx/2);
-        const dotY = Math.round(cellCy + yd[q]*cwo - dotPx/2);
+
+      if (dotMode === 1) {
+        // Mode 1 (Single): best-matching corner only
+        const bestQ = scores.indexOf(Math.max(...scores));
+        const dotX = Math.round(cellCx + xd[bestQ]*cwo - dotPx/2);
+        const dotY = Math.round(cellCy + yd[bestQ]*cwo - dotPx/2);
         oc.fillRect(dotX, dotY, dotPx, dotPx);
+      } else {
+        // Mode 2 (Smart 2): top-2 corners — same-face on axes, diagonal on diagonals
+        const sorted = [0,1,2,3].sort((a,b) => scores[b] - scores[a]);
+        for (const q of sorted.slice(0, 2)) {
+          const dotX = Math.round(cellCx + xd[q]*cwo - dotPx/2);
+          const dotY = Math.round(cellCy + yd[q]*cwo - dotPx/2);
+          oc.fillRect(dotX, dotY, dotPx, dotPx);
+        }
       }
     }
   }
