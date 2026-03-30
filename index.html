@@ -162,6 +162,7 @@
     <div style="display:flex;gap:8px;margin-top:4px">
       <button id="mode1Btn" style="background:#f0a500;color:#111;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">① Single ✓</button>
       <button id="mode2Btn" style="background:#444;color:#eee;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">② Twin</button>
+      <button id="mode3Btn" style="background:#444;color:#eee;padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600">③ Diagonal</button>
     </div>
   </div>
   <div class="control-group" style="justify-content:flex-end; margin-top:4px">
@@ -252,8 +253,9 @@ function setActive(btnId, groupIds) {
 
 document.getElementById('popBtn').addEventListener('click',  () => { popOut = true;  setActive('popBtn',   ['popBtn','caveBtn']); });
 document.getElementById('caveBtn').addEventListener('click', () => { popOut = false; setActive('caveBtn',  ['popBtn','caveBtn']); });
-document.getElementById('mode1Btn').addEventListener('click',() => { dotMode = 1;    setActive('mode1Btn', ['mode1Btn','mode2Btn']); });
-document.getElementById('mode2Btn').addEventListener('click',() => { dotMode = 2;    setActive('mode2Btn', ['mode1Btn','mode2Btn']); });
+document.getElementById('mode1Btn').addEventListener('click',() => { dotMode = 1; setActive('mode1Btn', ['mode1Btn','mode2Btn','mode3Btn']); });
+document.getElementById('mode2Btn').addEventListener('click',() => { dotMode = 2; setActive('mode2Btn', ['mode1Btn','mode2Btn','mode3Btn']); });
+document.getElementById('mode3Btn').addEventListener('click',() => { dotMode = 3; setActive('mode3Btn', ['mode1Btn','mode2Btn','mode3Btn']); });
 
 // --- Slider labels ---
 ['brushSize','cellSize','dotSize','bulgeStrength'].forEach(id => {
@@ -305,7 +307,8 @@ function render() {
   const cols  = Math.ceil(W / cell) + 1;
   const rows  = Math.ceil(H / cell) + 1;
   const dotPx = Math.max(2, Math.floor(cell * dotFrac));
-  const cwo   = cell * insetPct * 0.35; // offset from cell center to dot center (matches Kitaoka: 10/35 of cell)
+  const cwo   = cell * insetPct * 0.35;
+  const inset = Math.max(1, Math.round(cell * insetPct * 0.15));
 
   oc.fillStyle = colorBg;
   oc.fillRect(0, 0, W, H);
@@ -356,13 +359,33 @@ function render() {
         const dotX = Math.round(cellCx + xd[bestQ]*cwo - dotPx/2);
         const dotY = Math.round(cellCy + yd[bestQ]*cwo - dotPx/2);
         oc.fillRect(dotX, dotY, dotPx, dotPx);
-      } else {
-        // Mode 2 (Smart 2): top-2 corners — same-face on axes, diagonal on diagonals
+      } else if (dotMode === 2) {
+        // Mode 2 (Twin): top-2 corners — same-face on axes, diagonal on diagonals
         const sorted = [0,1,2,3].sort((a,b) => scores[b] - scores[a]);
         for (const q of sorted.slice(0, 2)) {
           const dotX = Math.round(cellCx + xd[q]*cwo - dotPx/2);
           const dotY = Math.round(cellCy + yd[q]*cwo - dotPx/2);
           oc.fillRect(dotX, dotY, dotPx, dotPx);
+        }
+      } else {
+        // Mode 3 (Diagonal): two dots always on strictly diagonal opposite corners
+        // axis (\ or /) chosen by quadrant relative to centroid
+        const ddx = cellCx - shapeCx;
+        const ddy = cellCy - shapeCy;
+        let useDiagSlash;
+        if (popOut) {
+          useDiagSlash = (ddx * ddy < 0);
+        } else {
+          useDiagSlash = (ddx * ddy >= 0);
+        }
+        if (useDiagSlash) {
+          // / diagonal: top-left + bottom-right
+          oc.fillRect(x0 + inset,                y0 + inset,                dotPx, dotPx);
+          oc.fillRect(x0 + cell - inset - dotPx, y0 + cell - inset - dotPx, dotPx, dotPx);
+        } else {
+          // \ diagonal: top-right + bottom-left
+          oc.fillRect(x0 + cell - inset - dotPx, y0 + inset,                dotPx, dotPx);
+          oc.fillRect(x0 + inset,                y0 + cell - inset - dotPx, dotPx, dotPx);
         }
       }
     }
